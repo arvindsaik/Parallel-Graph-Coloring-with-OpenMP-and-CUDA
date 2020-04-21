@@ -64,18 +64,18 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **ad
 
 void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
-//	#if OMP
-//		#pragma omp parallel num_threads(4)
-//		#pragma omp for
-//	#endif
+	#if OMP
+		#pragma omp parallel num_threads(4)
+		#pragma omp for
+	#endif
 	for (int i = 0; i < num_conflicts; ++i) {
 		int v = conflicts[i];
 		for (int j = 0; j < m[v]; ++j) {
 			int u = adj_list[v][j];
 			if (colors[u] == colors[v] && u < v) {
-//				#if OMP
-//					#pragma omp critical
-//				#endif
+				#if OMP
+					#pragma omp critical
+				#endif
 				temp_conflicts[*temp_num_conflicts] = u;
 				*temp_num_conflicts = *temp_num_conflicts + 1;
 				colors[u] = -u;
