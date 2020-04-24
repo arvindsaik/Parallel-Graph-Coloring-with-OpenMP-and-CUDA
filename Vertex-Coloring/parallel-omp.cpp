@@ -7,11 +7,26 @@ using namespace std;
 void printGraph(int n, int m[], int **adj_list) {
 	for (int i = 0; i < n; ++i) {
 		cout << "Node " << i << " || ";
+		cout << m[i] << endl;
+		fflush(stdin);
+		fflush(stdout);
 		for (int j = 0; j < m[i]; ++j) {
+			cout << i << " : " << j << endl;
+			fflush(stdin);
+			fflush(stdout);
 			cout << adj_list[i][j] << "    ";
+			fflush(stdin);
+			fflush(stdout);
 		}
 		cout << endl;
+		fflush(stdin);
+		fflush(stdout);
 	}
+
+}
+
+void loadGraph(char *filename, int *nvertices, int *max_degree, int *num_edges, int **adjacency_list) {
+
 }
 
 void setGraph(int n, int m[], int **adj_list) {
@@ -113,16 +128,41 @@ void IPGC(int n, int m[], int maxd, int **adj_list) {
 	}
 }
 
-int main() {
-	int nvertices = 4;
-	int num_edges[] = {2, 3, 2, 3};
-	int max_degree = 3;
-	int **adjacency_list = (int **) malloc(nvertices * sizeof(int *));
-	for (int i = 0; i < nvertices; ++i) {
-		adjacency_list[i] = (int *) malloc(num_edges[i] * sizeof(int));
-	}
+int main(int argc, char *argv[]) {
+	int nvertices, max_degree;
+	int *num_edges;
+	int **adjacency_list;
+	char *filename = argv[1];
 
-	setGraph(nvertices, num_edges, adjacency_list);
-	printGraph(nvertices, num_edges, adjacency_list);
+	cout << filename << endl;
+
+	ifstream fin(filename);
+	fin >> (max_degree);
+	fin >> (nvertices);
+	cout << nvertices << " : " << max_degree << endl;
+	fflush(stdin);
+	fflush(stdout);
+	adjacency_list = (int **) malloc(nvertices * sizeof(int *));
+	num_edges = (int *) malloc(nvertices * sizeof(int ));
+	for (int i = 0; i < nvertices; ++i) {
+		cout << i << "-----";
+		fin >> num_edges[i];
+		cout << num_edges[i] << " : ";
+		fflush(stdin);
+		fflush(stdout);
+		adjacency_list[i] = (int *) malloc(num_edges[i] * sizeof(int));
+		for (int j = 0; j < num_edges[i]; ++j) {
+			fin >> adjacency_list[i][j];
+			cout << adjacency_list[i][j] << " ";
+			fflush(stdin);
+			fflush(stdout);
+		}
+		cout << endl;
+		fflush(stdin);
+		fflush(stdout);
+	}
+	fin.close();
+
+//	printGraph(nvertices, num_edges, adjacency_list);
 	IPGC(nvertices, num_edges, max_degree, adjacency_list);
 }

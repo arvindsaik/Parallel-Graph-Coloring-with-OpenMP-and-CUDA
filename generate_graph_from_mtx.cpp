@@ -4,6 +4,7 @@ using namespace std;
 int main(int argc, char *argv[]) {
     string filename;
     filename = argv[1];
+    int flag = atoi(argv[2]);
     ifstream fin(filename.c_str());
 
     while (fin.peek() == '%') fin.ignore(2048, '\n');
@@ -14,11 +15,12 @@ int main(int argc, char *argv[]) {
     fin >> M >> N >> L;
     vector<vector<long> > adjacency_list(M, vector<long>(0));
     long max_degree = 0;
-
+	cout << "Num vertices: " << M << endl;
     for (int i = 0; i < L; i++) {
         long a, b;
         double d;
-        fin >> a >> b >> d;
+        fin >> a >> b;
+        if (flag == 0) fin >> d;
         a -= 1;
         b -= 1;
         if (a == b) continue;
@@ -35,14 +37,12 @@ int main(int argc, char *argv[]) {
 
     vertices = M;
 
-    fflush(stdin);
-    fflush(stdout);
-    string new_filename = filename.substr(0, filename.length()-3);
+    string new_filename = filename.substr(0, filename.length()-4);
     new_filename += "_graph";
     ofstream fout(new_filename.c_str());
 
     fout << max_degree << "\n";
-    fout << edges << " " << vertices << "\n";
+    fout << vertices << "\n";
     for (long i = 0; i < M; i++) {
         fout << adjacency_list[i].size();
         for (long j = 0; j < adjacency_list[i].size(); j++) {
@@ -51,8 +51,8 @@ int main(int argc, char *argv[]) {
         }
         fout << "\n";
     }
-
-    cout << "Format of the graph generated: " <<endl << "MAX DEGREE "<<endl << "NUM_EDGES<space>NUM_VERTICES" <<endl ;
+	fout.close();
+    cout << "Format of the graph generated: " <<endl << "MAX DEGREE "<<endl << "NUM_VERTICES" <<endl ;
     cout << "Adjacency List Size for vertex 0<space>Adjacency list for vertex 0" <<endl<<"....."<<endl <<endl;
     cout << "Please note: The graph generated is an undirected graph" << endl;
     return 0;
