@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
 
     long M, N, L;
     long vertices = 0, edges = 0;
+    set<pair<long, long> > edges_set;
 
     fin >> M >> N >> L;
     vector<vector<long> > adjacency_list(M, vector<long>(0));
@@ -24,6 +25,11 @@ int main(int argc, char *argv[]) {
         a -= 1;
         b -= 1;
         if (a == b) continue;
+        if (edges_set.find(make_pair(a, b)) != edges_set.end() || edges_set.find(make_pair(b, a)) != edges_set.end()) {
+            continue;
+        } else {
+            edges_set.insert(make_pair(a, b));
+        }
         adjacency_list[a].push_back(b);
         adjacency_list[b].push_back(a);
         if (adjacency_list[a].size() > max_degree) {
@@ -41,6 +47,9 @@ int main(int argc, char *argv[]) {
     new_filename += "_graph";
     ofstream fout(new_filename.c_str());
 
+    cout << "Hi" << __LINE__ << endl;
+    fflush(stdin);
+    fflush(stdout);
     fout << max_degree << "\n";
     fout << vertices << "\n";
     for (long i = 0; i < M; i++) {
