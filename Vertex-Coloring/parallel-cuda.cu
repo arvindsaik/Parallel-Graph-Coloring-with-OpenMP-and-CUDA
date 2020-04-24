@@ -8,38 +8,40 @@ using namespace std;
 
 int num_vertices;
 int num_edges;
+int max_degree;
 
-void printGraph(int n, int m[], int **adj_list) {
+void printGraph(int n, int m[], int *adj_list) {
     for (int i = 0; i < n; ++i) {
         cout << "Node " << i << " || ";
         for (int j = 0; j < m[i]; ++j) {
-            cout << adj_list[i][j] << "    ";
+            cout << adj_list[i * max_degree + j] << "    ";
         }
         cout << endl;
     }
 }
 
-void setGraph(int n, int m[], int **adj_list) {
+void setGraph(int n, int m[], int *adj_list) {
     // Vertex 0
-    adj_list[0][0] = 1;
-    adj_list[0][1] = 3;
+    adj_list[0 * max_degree + 0] = 1;
+    adj_list[0 * max_degree + 1] = 3;
 
     // Vertex 1
-    adj_list[1][0] = 0;
-    adj_list[1][1] = 2;
-    adj_list[1][2] = 3;
+    adj_list[1 * max_degree + 0] = 0;
+    adj_list[1 * max_degree + 1] = 2;
+    adj_list[1 * max_degree + 2] = 3;
 
     // Vertex 2
-    adj_list[2][0] = 1;
-    adj_list[2][1] = 3;
+    adj_list[2 * max_degree + 0] = 1;
+    adj_list[2 * max_degree + 1] = 3;
 
     // Vertex 3
-    adj_list[3][0] = 0;
-    adj_list[3][1] = 1;
-    adj_list[3][2] = 2;
+    adj_list[3 * max_degree + 0] = 0;
+    adj_list[3 * max_degree + 1] = 1;
+    adj_list[3 * max_degree + 2] = 2;
 }
 
-__global__ assign_colors_kernel(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
+__global__ void assign_colors_kernel(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors,
+                                     bool* forbidden) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     for (int j = 0; j < maxd + 1; ++j) {
@@ -62,11 +64,8 @@ __global__ assign_colors_kernel(int num_conflicts, int *conflicts, int maxd, int
     }
 }
 
-void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
-    bool **forbidden = (bool **) malloc(num_conflicts * sizeof(bool *));
-    for (int i = 0; i < num_conflicts; ++i) {
-        forbidden[i] = (bool *) malloc((maxd + 1) * sizeof(bool));
-    }
+void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors) {
+    bool *forbidden = (bool *) malloc(num_conflicts * (maxd + 1) * sizeof(bool));
 
     int* device_conflicts;
     int* device_m;
@@ -75,32 +74,32 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **ad
     bool* device_forbidden;
 
     cudaMalloc((void **) &device_conflicts, num_conflicts * sizeof(int));
-    cudaMalloc((void**) &m, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_m, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_adj_list, maxd * num_vertices * sizeof(int));
     cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_forbidden, (maxd+1) * num_conflicts * sizeof(bool));
 
-    cudaMemcpy(device_conflicts, conflicts, * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_conflicts, conflicts, num_conflicts * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_adj_list, adj_list, maxd * num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_forbidden, forbidden, num_conflicts * (maxd + 1) * sizeof(bool), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_m, m, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
 
-    for (int i = 0; i < num_conflicts; ++i) {
+    assign_colors_kernel <<<1, num_conflicts>>> (num_conflicts, device_conflicts, maxd, device_m, device_adj_list,
+            device_colors, device_forbidden);
+    cudaDeviceSynchronize();
 
-    }
+    cudaMemcpy(conflicts, device_conflicts, num_conflicts * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(colors, device_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
 }
 
-void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list, int *colors,
+void detect_conflicts(int num_conflicts, int *conflicts, int *m, int *adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
-#if OMP
-    #pragma omp parallel num_threads(4)
-		#pragma omp for
-#endif
     for (int i = 0; i < num_conflicts; ++i) {
         int v = conflicts[i];
         for (int j = 0; j < m[v]; ++j) {
-            int u = adj_list[v][j];
+            int u = adj_list[v * max_degree + j];
             if (colors[u] == colors[v] && u < v) {
-#if OMP
-#pragma omp critical
-#endif
                 temp_conflicts[*temp_num_conflicts] = u;
                 *temp_num_conflicts = *temp_num_conflicts + 1;
                 colors[u] = -u;
@@ -109,7 +108,7 @@ void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list,
     }
 }
 
-void IPGC(int n, int m[], int maxd, int **adj_list) {
+void IPGC(int n, int m[], int maxd, int *adj_list) {
     int *colors = (int *) calloc(n, sizeof(int));
     int num_conflicts = n;
     int *conflicts = (int *) malloc(num_conflicts * sizeof(int));
@@ -142,11 +141,8 @@ int main() {
     int nvertices = 4;
     num_vertices = nvertices;
     int num_edges[] = {2, 3, 2, 3};
-    int max_degree = 3;
-    int **adjacency_list = (int **) malloc(nvertices * sizeof(int *));
-    for (int i = 0; i < nvertices; ++i) {
-        adjacency_list[i] = (int *) malloc(max_degree * sizeof(int));
-    }
+    max_degree = 3;
+    int *adjacency_list = (int *) calloc(max_degree * nvertices, sizeof(int));
 
     setGraph(nvertices, num_edges, adjacency_list);
     printGraph(nvertices, num_edges, adjacency_list);
