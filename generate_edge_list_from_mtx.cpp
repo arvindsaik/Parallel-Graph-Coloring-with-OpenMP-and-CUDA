@@ -35,8 +35,11 @@ int main(int argc, char *argv[]) {
         } else {
             edges_set.insert(make_pair(a, b));
         }
-
-        fout << a << " " << b << "\n";
+    }
+    fout << edges_set.size() << endl;
+	set<pair < long, long > >::iterator it;
+    for (it = edges_set.begin(); it != edges_set.end(); ++it) {
+	    fout << it->first << " " << it->second << "\n";
     }
 
     fout.close();
