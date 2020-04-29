@@ -45,7 +45,8 @@ void setGraph(int n, int m[], int **adj_list) {
 	adj_list[3][2] = 2;
 }
 
-void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
+void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors,
+		int *temp_colors) {
 #if OMP
 	#pragma omp parallel num_threads(10)
 	#pragma omp for
@@ -63,7 +64,8 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **ad
 		}
 		for (int j = 0; j < maxd + 1; ++j) {
 			if (forbidden[j] == false) {
-				colors[v] = j;
+				//colors[v] = j;
+				temp_colors[v] = j;
 				break;
 			}
 		}
@@ -71,30 +73,31 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **ad
 	}
 }
 
-void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list, int *colors,
+void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list, int *temp_colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
-	#if OMP
-		#pragma omp parallel num_threads(4)
-		#pragma omp for
-	#endif
+#if OMP
+	#pragma omp parallel num_threads(4)
+	#pragma omp for
+#endif
 	for (int i = 0; i < num_conflicts; ++i) {
 		int v = conflicts[i];
 		for (int j = 0; j < m[v]; ++j) {
 			int u = adj_list[v][j];
-			if (colors[u] == colors[v] && u < v) {
-				#if OMP
-					#pragma omp critical
-				#endif
+			if (temp_colors[u] == temp_colors[v] && u < v) {
+#if OMP
+	#pragma omp critical
+#endif
 				temp_conflicts[*temp_num_conflicts] = u;
 				*temp_num_conflicts = *temp_num_conflicts + 1;
-				colors[u] = -u;
+				temp_colors[u] = -u;
 			}
 		}
 	}
 }
 
-int * IPGC(int n, int m[], int maxd, int **adj_list) {
+int *IPGC(int n, int m[], int maxd, int **adj_list) {
 	int *colors = (int *) calloc(n, sizeof(int));
+	int *temp_colors = (int *) calloc(n, sizeof(int));
 	int num_conflicts = n;
 	int *conflicts = (int *) malloc(num_conflicts * sizeof(int));
 	for (int i = 0; i < n; ++i) {
@@ -104,10 +107,11 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 	int *temp_conflicts = (int *) malloc(num_conflicts * sizeof(int));
 
 	while (num_conflicts) {
-		assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
+		assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors, temp_colors);
 		cout << "Assign colors done!\n";
-		detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
+		detect_conflicts(num_conflicts, conflicts, m, adj_list, temp_colors, &temp_num_conflicts, temp_conflicts);
 		cout << "Detect conflicts done\n";
+
 		// Swap
 		num_conflicts = temp_num_conflicts;
 		int *temp;
@@ -115,6 +119,10 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 		temp_conflicts = conflicts;
 		conflicts = temp;
 		temp_num_conflicts = 0;
+
+		for (int i = 0; i < n; ++i) {
+			colors[i] = temp_colors[i];
+		}
 	}
 
 	for (int i = 0; i < n; ++i) {
@@ -152,25 +160,20 @@ int main(int argc, char *argv[]) {
 	ifstream fin(filename);
 	fin >> (max_degree);
 	fin >> (nvertices);
-	cout << nvertices << " : " << max_degree << endl;
 	fflush(stdin);
 	fflush(stdout);
 	adjacency_list = (int **) malloc(nvertices * sizeof(int *));
-	num_edges = (int *) malloc(nvertices * sizeof(int ));
+	num_edges = (int *) malloc(nvertices * sizeof(int));
 	for (int i = 0; i < nvertices; ++i) {
-		cout << i << "-----";
 		fin >> num_edges[i];
-		cout << num_edges[i] << " : ";
 		fflush(stdin);
 		fflush(stdout);
 		adjacency_list[i] = (int *) malloc(num_edges[i] * sizeof(int));
 		for (int j = 0; j < num_edges[i]; ++j) {
 			fin >> adjacency_list[i][j];
-			cout << adjacency_list[i][j] << " ";
 			fflush(stdin);
 			fflush(stdout);
 		}
-		cout << endl;
 		fflush(stdin);
 		fflush(stdout);
 	}
