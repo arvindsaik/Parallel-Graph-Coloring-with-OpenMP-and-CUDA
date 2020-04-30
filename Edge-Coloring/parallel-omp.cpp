@@ -46,7 +46,10 @@ void setGraph(int n, int m[], int **adj_list) {
 }
 
 void assign_colors(int n, int maxd, int *colors, bool **vforbidden) {
-	cout << "Max degree is : " << maxd <<  endl;
+#if OMP
+	#pragma omp parallel num_threads(10)
+	#pragma omp for
+#endif
 	for (int i = 0; i < n; ++i) {
 		if (colors[i] != -1) continue;
 		for (int j = 0; j < maxd + 1; ++j) {
@@ -60,6 +63,10 @@ void assign_colors(int n, int maxd, int *colors, bool **vforbidden) {
 
 bool detect_conflicts(int num_edges, int **edges, int *colors, int *temp_colors, bool **vforbidden) {
 	bool is_conflict = false;
+#if OMP
+	#pragma omp parallel num_threads(10)
+	#pragma omp for
+#endif
 	for (int  i = 0; i < num_edges; ++i) {
 		int smaller_vertex, bigger_vertex;
 		if (edges[i][0] > edges[i][1]) {
@@ -70,10 +77,6 @@ bool detect_conflicts(int num_edges, int **edges, int *colors, int *temp_colors,
 			smaller_vertex = edges[i][0];
 		}
 		if (colors[smaller_vertex] == colors[bigger_vertex]) {
-			if (smaller_vertex == 45 || bigger_vertex == 45) {
-				cout << smaller_vertex  << " < " << bigger_vertex << endl;
-				cout << colors[smaller_vertex] << " : " << colors[bigger_vertex] << endl;
-			}
 			temp_colors[smaller_vertex] = -1;
 			is_conflict = true;
 		}
@@ -94,26 +97,29 @@ int *IPGC(int n, int num_edges, int maxd, int **edges) {
 		vforbidden[i] = (bool *) calloc(maxd + 1, sizeof(bool));
 	}
 	bool *conflicts = (bool *) malloc(n * sizeof(bool));
-	long iter = 1;
+	long iter = 0;
 	int is_conflict = true;
 	while (is_conflict) {
-		cout << "Iteration " << iter++ << endl;
+		iter++;
 		assign_colors(n, maxd, colors, vforbidden);
-		for (int i = 0; i < n; ++i) {
-			cout << "Color of node " << i << " : " << colors[i] << endl;
-		}
+#if OMP
+	#pragma omp parallel num_threads(10)
+	#pragma omp for
+#endif
 		for (int i = 0; i < n; ++i) {
 			memset(vforbidden[i], 0, sizeof(vforbidden[i]));
 			temp_colors[i] = colors[i];
 		}
 		is_conflict = detect_conflicts(num_edges, edges, colors, temp_colors, vforbidden);
+#if OMP
+	#pragma omp parallel num_threads(10)
+	#pragma omp for
+#endif
 		for (int i = 0; i < n; ++i) {
 			colors[i] = temp_colors[i];
-			cout << "Color of node " << i << " : " << colors[i] << endl;
 		}
-//		if (iter == 10) break;
 	}
-
+	cout << "Iteration " << iter << endl;
 	for (int i = 0; i < n; ++i) {
 		cout << "Color of node " << i << " : " << colors[i] << endl;
 	}
@@ -154,7 +160,6 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < num_edges; ++i) {
 		fin >> edges[i][0];
 		fin >> edges[i][1];
-		cout << edges[i][0] << "---" << edges[i][1] << endl;
 		fflush(stdin);
 		fflush(stdout);
 	}
