@@ -15,12 +15,11 @@ int num_vertices;
 int num_edges;
 int max_degree;
 
-int* device_conflicts;
+int* zero_array;
+
 int* device_m;
 int* device_adj_list;
-int* device_colors;
-int* device_new_colors;
-bool* device_forbidden;
+int* device_conflicts;
 int* device_temp_conflicts;
 
 void printGraph(int n, int m[], int *adj_list) {
@@ -54,7 +53,7 @@ void setGraph(int n, int m[], int *adj_list) {
 }
 
 __global__ void assign_colors_kernel(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors,
-        int* new_colors, bool* forbidden) {
+                                     int* new_colors, bool* forbidden) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     for (int j = 0; j < maxd + 1; ++j) {
@@ -110,6 +109,11 @@ max_degree) {
     }
 }
 
+__global__ void setValues(int* array) {
+    int i = (blockIdx.x * blockDim.x + threadIdx.x);
+    array[i] = 0;
+}
+
 int nextPow2(int N)
 {
     unsigned count = 0;
@@ -155,6 +159,16 @@ void exclusive_scan(int *device_data, int length) {
 }
 
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors) {
+    bool *forbidden = (bool *) malloc(num_conflicts * (maxd + 1) * sizeof(bool));
+
+    int* device_colors;
+    int* device_new_colors;
+    bool* device_forbidden;
+
+    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_new_colors, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_forbidden, (maxd+1) * num_conflicts * sizeof(bool));
+
     cudaMemcpy(device_conflicts, conflicts, num_conflicts * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(device_new_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
@@ -168,8 +182,16 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj
 
 void detect_conflicts(int num_conflicts, int *conflicts, int *m, int *adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
+    // Exclusive scan
+    int* device_colors;
+
+    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
+//    cudaMemset((void*) device_colors, 0, num_vertices * sizeof(int));
     cudaMemcpy(device_conflicts, conflicts, (num_conflicts + 1) * sizeof(int), cudaMemcpyHostToDevice);
+
     cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    
+    cudaMemset((void*) device_temp_conflicts, 0, (num_vertices+1) * sizeof(int));
 
     detectConflictsKernel<<<1, num_conflicts>>> (device_conflicts, device_adj_list, device_temp_conflicts, device_colors,
             device_m, max_degree);
@@ -266,19 +288,18 @@ int main(int argc, char *argv[]) {
     }
     fin.close();
 
-//	printGraph(nvertices, num_edges, adjacency_list);
+    zero_array = (int*) malloc((num_vertices+1) * sizeof(int));
+    memset(zero_array, 0, (num_vertices+1) * sizeof(int));
 
-    cudaMalloc((void **) &device_conflicts, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_m, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_adj_list, max_degree * num_vertices * sizeof(int));
-    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
-    cudaMalloc((void**) &device_new_colors, num_vertices * sizeof(int));
-    cudaMalloc((void**) &device_forbidden, (max_degree+1) * num_vertices * sizeof(bool));
-    cudaMalloc((void**) &device_temp_conflicts, (num_vertices + 1) * sizeof(int));
+    cudaMalloc((void**) &device_temp_conflicts, nextPow2(num_vertices + 1) * sizeof(int));
+    cudaMalloc((void**) &device_conflicts, (num_vertices + 1) * sizeof(int));
 
     cudaMemcpy(device_adj_list, adjacency_list, max_degree * num_vertices * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(device_m, num_edges, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
 
+//	printGraph(nvertices, num_edges, adjacency_list);
     int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
     cout << "Coloring done!" << endl;
     if (checker(nvertices, num_edges, colors, adjacency_list)) {
