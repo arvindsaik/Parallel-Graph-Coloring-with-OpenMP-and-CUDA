@@ -22,6 +22,8 @@ int main(int argc, char *argv[]) {
     new_filename += "_edge_list";
     ofstream fout(new_filename.c_str());
 
+    set<long> vertices;
+
     for (int i = 0; i < L; i++) {
         long a, b;
         double d;
@@ -35,7 +37,10 @@ int main(int argc, char *argv[]) {
         } else {
             edges_set.insert(make_pair(a, b));
         }
+        vertices.insert(a);
+        vertices.insert(b);
     }
+    fout << vertices.size() << " ";
     fout << edges_set.size() << endl;
 	set<pair < long, long > >::iterator it;
     for (it = edges_set.begin(); it != edges_set.end(); ++it) {
@@ -44,6 +49,7 @@ int main(int argc, char *argv[]) {
 
     fout.close();
     cout << "Format of the graph generated: " <<endl ;
+    cout << "NumVertices NumEdges" << endl;
     cout << "VERTEX1 VERTEX2" << endl;
     cout << "VERTEX3 VERTEX4" << endl;
     cout << "VERTEX5 VERTEX6" << endl;
