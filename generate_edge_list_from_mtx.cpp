@@ -23,6 +23,7 @@ int main(int argc, char *argv[]) {
     ofstream fout(new_filename.c_str());
 
     set<long> vertices;
+    map<long, long> edge_count;
 
     for (int i = 0; i < L; i++) {
         long a, b;
@@ -40,16 +41,39 @@ int main(int argc, char *argv[]) {
         vertices.insert(a);
         vertices.insert(b);
     }
-    fout << vertices.size() << " ";
+
+	set < pair < long, long > > ::iterator it;
+
+    for (int i = 0; i < vertices.size(); ++i) {
+    	edge_count.insert(make_pair(i, 0));
+    }
+
+	for (it = edges_set.begin(); it != edges_set.end(); ++it) {
+		edge_count[it->first] = edge_count[it->first] + 1;
+		edge_count[it->second] = edge_count[it->second] + 1;
+		cout << edge_count[it->first] << " snsdfjnejn\n";
+	}
+
+	long max_edges = 0;
+	for (int i = 0; i < vertices.size(); ++i) {
+		map<long, long>::iterator it = edge_count.find(i);
+		if (it->second > max_edges) {
+			max_edges = it->second;
+		}
+	}
+
+	fout << max_edges << " ";
+	fout << vertices.size() << " ";
     fout << edges_set.size() << endl;
-	set<pair < long, long > >::iterator it;
+
+
     for (it = edges_set.begin(); it != edges_set.end(); ++it) {
 	    fout << it->first << " " << it->second << "\n";
     }
 
     fout.close();
     cout << "Format of the graph generated: " <<endl ;
-    cout << "NumVertices NumEdges" << endl;
+    cout << "MaxDegree NumVertices NumEdges" << endl;
     cout << "VERTEX1 VERTEX2" << endl;
     cout << "VERTEX3 VERTEX4" << endl;
     cout << "VERTEX5 VERTEX6" << endl;
