@@ -14,13 +14,16 @@ using namespace std;
 int num_vertices;
 int num_edges;
 int max_degree;
-
-int* zero_array;
+int *num_edges_per_vertex;
+int *adjacency_list;
 
 int* device_m;
 int* device_adj_list;
 int* device_conflicts;
 int* device_temp_conflicts;
+int* device_colors;
+int* device_new_colors;
+bool* device_forbidden;
 
 void printGraph(int n, int m[], int *adj_list) {
     for (int i = 0; i < n; ++i) {
@@ -134,8 +137,6 @@ void exclusive_scan(int *device_data, int length) {
 
     length = nextPow2(length);
 
-    // compute number of blocks and threads per block
-
     // upsweep phase.
     for (int twod = 1; twod < length; twod *= 2) {
         int twod1 = twod * 2;
@@ -159,42 +160,18 @@ void exclusive_scan(int *device_data, int length) {
 }
 
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors) {
-    bool *forbidden = (bool *) malloc(num_conflicts * (maxd + 1) * sizeof(bool));
-
-    int* device_colors;
-    int* device_new_colors;
-    bool* device_forbidden;
-
-    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
-    cudaMalloc((void**) &device_new_colors, num_vertices * sizeof(int));
-    cudaMalloc((void**) &device_forbidden, (maxd+1) * num_conflicts * sizeof(bool));
-
-    cudaMemcpy(device_conflicts, conflicts, num_conflicts * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_new_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
-
+    cudaMemcpy(device_colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToDevice);
     assign_colors_kernel <<<1, num_conflicts>>> (num_conflicts, device_conflicts, maxd, device_m, device_adj_list,
             device_colors, device_new_colors, device_forbidden);
     cudaDeviceSynchronize();
-
-    cudaMemcpy(colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
 }
 
 void detect_conflicts(int num_conflicts, int *conflicts, int *m, int *adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
-    // Exclusive scan
-    int* device_colors;
-
-    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
-//    cudaMemset((void*) device_colors, 0, num_vertices * sizeof(int));
-    cudaMemcpy(device_conflicts, conflicts, (num_conflicts + 1) * sizeof(int), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
-    
     cudaMemset((void*) device_temp_conflicts, 0, (num_vertices+1) * sizeof(int));
 
-    detectConflictsKernel<<<1, num_conflicts>>> (device_conflicts, device_adj_list, device_temp_conflicts, device_colors,
-            device_m, max_degree);
+    detectConflictsKernel<<<1, num_conflicts>>> (device_conflicts, device_adj_list, device_temp_conflicts,
+            device_new_colors, device_m, max_degree);
     cudaDeviceSynchronize();
 
     exclusive_scan(device_temp_conflicts, num_vertices + 1);
@@ -204,9 +181,6 @@ void detect_conflicts(int num_conflicts, int *conflicts, int *m, int *adj_list, 
 
     findConflicts<<<1, num_vertices>>> (device_conflicts, device_temp_conflicts);
     cudaDeviceSynchronize();
-
-    cudaMemcpy(temp_conflicts, device_conflicts, (num_vertices + 1) * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(colors, device_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
 }
 
 int* IPGC(int n, int m[], int maxd, int *adj_list) {
@@ -216,12 +190,13 @@ int* IPGC(int n, int m[], int maxd, int *adj_list) {
     for (int i = 0; i < n; ++i) {
         conflicts[i] = i;
     }
+    cudaMemcpy(device_conflicts, conflicts, num_conflicts * sizeof(int), cudaMemcpyHostToDevice);
+
     int temp_num_conflicts = 0;
     int *temp_conflicts = (int *) malloc((num_conflicts+1) * sizeof(int));
 
     while (num_conflicts) {
         assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
-
         detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
 
         // Swap
@@ -233,6 +208,7 @@ int* IPGC(int n, int m[], int maxd, int *adj_list) {
         temp_num_conflicts = 0;
     }
 
+    cudaMemcpy(colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
     for (int i = 0; i < n; ++i) {
         cout << "Color of node " << i << " : " << colors[i] << endl;
     }
@@ -246,7 +222,8 @@ bool checker(int nvertices, int *num_edges, int *colors, int *adjacency_list) {
     bool passed = true;
     for (int i = 0; i < nvertices; ++i) {
         for (int j = 0; j < num_edges[i]; ++j) {
-            if (colors[i] == colors[adjacency_list[i * max_degree + j]]) {
+            if (colors[i] == colors[adjacency_list[i * max_degree + j]] || colors[i] < 0 || colors[i] > max_degree +
+            1) {
                 passed = false;
                 cout << "Failed coloring between nodes : " << i << " -- " << adjacency_list[i * max_degree + j];
                 fflush(stdin);
@@ -259,50 +236,38 @@ bool checker(int nvertices, int *num_edges, int *colors, int *adjacency_list) {
 }
 
 int main(int argc, char *argv[]) {
-    int nvertices;
-    int *num_edges;
-    int *adjacency_list;
     char *filename = argv[1];
 
     ifstream fin(filename);
     fin >> (max_degree);
-    fin >> (nvertices);
-    num_vertices = nvertices;
-    fflush(stdin);
-    fflush(stdout);
+    fin >> (num_vertices);
 
-    adjacency_list = (int *) malloc(nvertices * (max_degree) * sizeof(int));
-    num_edges = (int *) malloc(nvertices * sizeof(int ));
+    adjacency_list = (int *) malloc(num_vertices * (max_degree) * sizeof(int));
+    num_edges_per_vertex = (int *) malloc(num_vertices * sizeof(int ));
 
-    for (int i = 0; i < nvertices; ++i) {
-        fin >> num_edges[i];
-        fflush(stdin);
-        fflush(stdout);
-        for (int j = 0; j < num_edges[i]; ++j) {
+    for (int i = 0; i < num_vertices; ++i) {
+        fin >> num_edges_per_vertex[i];
+        for (int j = 0; j < num_edges_per_vertex[i]; ++j) {
             fin >> adjacency_list[i * max_degree + j];
-            fflush(stdin);
-            fflush(stdout);
         }
-        fflush(stdin);
-        fflush(stdout);
     }
     fin.close();
-
-    zero_array = (int*) malloc((num_vertices+1) * sizeof(int));
-    memset(zero_array, 0, (num_vertices+1) * sizeof(int));
 
     cudaMalloc((void**) &device_m, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_adj_list, max_degree * num_vertices * sizeof(int));
     cudaMalloc((void**) &device_temp_conflicts, nextPow2(num_vertices + 1) * sizeof(int));
     cudaMalloc((void**) &device_conflicts, (num_vertices + 1) * sizeof(int));
+    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_new_colors, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_forbidden, (max_degree+1) * num_vertices * sizeof(bool));
 
     cudaMemcpy(device_adj_list, adjacency_list, max_degree * num_vertices * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_m, num_edges, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_m, num_edges_per_vertex, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
 
 //	printGraph(nvertices, num_edges, adjacency_list);
-    int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
+    int *colors = IPGC(num_vertices, num_edges_per_vertex, max_degree, adjacency_list);
     cout << "Coloring done!" << endl;
-    if (checker(nvertices, num_edges, colors, adjacency_list)) {
+    if (checker(num_vertices, num_edges_per_vertex, colors, adjacency_list)) {
         cout << "CORRECT COLORING!!!" << endl;
     } else {
         cout << "INCORRECT COLORING!!!" << endl;
