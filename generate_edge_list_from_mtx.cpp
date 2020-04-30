@@ -51,7 +51,6 @@ int main(int argc, char *argv[]) {
 	for (it = edges_set.begin(); it != edges_set.end(); ++it) {
 		edge_count[it->first] = edge_count[it->first] + 1;
 		edge_count[it->second] = edge_count[it->second] + 1;
-		cout << edge_count[it->first] << " snsdfjnejn\n";
 	}
 
 	long max_edges = 0;
