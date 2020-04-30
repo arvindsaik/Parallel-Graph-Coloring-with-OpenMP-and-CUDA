@@ -69,6 +69,83 @@ __global__ void assign_colors_kernel(int num_conflicts, int *conflicts, int maxd
     }
 }
 
+__global__ void upsweep(int *data, int N, int twod, int twod1) {
+    int i = (blockIdx.x * blockDim.x + threadIdx.x) * twod1;
+    if (i + twod1 - 1 < N)
+        data[i + twod1 - 1] += data[i + twod - 1];
+}
+
+__global__ void downsweep(int *data, int twod, int twod1) {
+    int i = (blockIdx.x * blockDim.x + threadIdx.x) * twod1;
+    int t = data[i + twod - 1];
+    data[i + twod - 1] = data[i + twod1 - 1];
+    data[i + twod1 - 1] += t;
+}
+
+__global__ void findConflicts(int* conflicts, int* temp_conflicts) {
+    int i = (blockIdx.x * blockDim.x + threadIdx.x);
+    if (temp_conflicts[i] < temp_conflicts[i+1]) {
+        conflicts[temp_conflicts[i]] = i;
+    }
+}
+
+__global__ void detectConflictsKernel(int* conflicts, int* adj_list, int* temp_conflicts, int* colors, int* m, int
+max_degree) {
+    int i = (blockIdx.x * blockDim.x + threadIdx.x);
+    int v = conflicts[i];
+    for (int j = 0; j < m[v]; ++j) {
+        int u = adj_list[v * max_degree + j];
+        if (colors[u] == colors[v] && u < v) {
+            temp_conflicts[u] = 1;
+            colors[u] = -u;
+        }
+    }
+}
+
+int nextPow2(int N)
+{
+    unsigned count = 0;
+
+    if (N && !(N & (N - 1)))
+        return N;
+
+    while(N != 0)
+    {   N>>= 1;
+        count += 1;
+    }
+
+    return 1 << count;
+}
+
+void exclusive_scan(int *device_data, int length) {
+    int orig_length = length;
+
+    length = nextPow2(length);
+
+    // compute number of blocks and threads per block
+
+    // upsweep phase.
+    for (int twod = 1; twod < length; twod *= 2) {
+        int twod1 = twod * 2;
+        const int threadsPerBlock = (512 > length / twod1) ? length / twod1 : 512;
+        const int blocks = ((length / twod1) + threadsPerBlock - 1) / threadsPerBlock;
+        upsweep << < blocks, threadsPerBlock >> > (device_data, orig_length, twod, twod1);
+        cudaDeviceSynchronize();
+    }
+
+    // Setting the last element to zero
+    cudaMemset(device_data + length - 1, 0, sizeof(int));
+
+    // downsweep phase.
+    for (int twod = length / 2; twod >= 1; twod /= 2) {
+        int twod1 = twod * 2;
+        const int threadsPerBlock = (512 > length / twod1) ? length / twod1 : 512;
+        const int blocks = ((length / twod1) + threadsPerBlock - 1) / threadsPerBlock;
+        downsweep << < blocks, threadsPerBlock >> > (device_data, twod, twod1);
+        cudaDeviceSynchronize();
+    }
+}
+
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors) {
     bool *forbidden = (bool *) malloc(num_conflicts * (maxd + 1) * sizeof(bool));
 
@@ -101,28 +178,49 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int *adj
 
 void detect_conflicts(int num_conflicts, int *conflicts, int *m, int *adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
-    for (int i = 0; i < num_conflicts; ++i) {
-        int v = conflicts[i];
-        for (int j = 0; j < m[v]; ++j) {
-            int u = adj_list[v * max_degree + j];
-            if (colors[u] == colors[v] && u < v) {
-                temp_conflicts[*temp_num_conflicts] = u;
-                *temp_num_conflicts = *temp_num_conflicts + 1;
-                colors[u] = -u;
-            }
-        }
-    }
+    // Exclusive scan
+    int* device_temp_conflicts;
+    int* device_conflicts;
+    int* device_adj_list;
+    int* device_m;
+    int* device_colors;
+
+    cudaMalloc((void**) &device_temp_conflicts, (num_vertices + 1) * sizeof(int));
+    cudaMalloc((void**) &device_conflicts, (num_vertices + 1) * sizeof(int));
+    cudaMalloc((void**) &device_adj_list, max_degree * num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_m, num_vertices * sizeof(int));
+    cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
+
+    cudaMemcpy(device_conflicts, conflicts, (num_conflicts + 1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_adj_list, adj_list, max_degree * num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_colors, colors, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_m, m, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
+
+    detectConflictsKernel<<<1, num_conflicts>>> (device_conflicts, device_adj_list, device_temp_conflicts, device_colors,
+            device_m, max_degree);
+    cudaDeviceSynchronize();
+
+    exclusive_scan(device_temp_conflicts, num_vertices + 1);
+
+    cudaMemcpy(temp_num_conflicts, device_temp_conflicts + num_vertices, sizeof(int),
+               cudaMemcpyDeviceToHost);
+
+    findConflicts<<<1, num_vertices>>> (device_conflicts, device_temp_conflicts);
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(temp_conflicts, device_conflicts, (num_vertices + 1) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(colors, device_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
 }
 
 int* IPGC(int n, int m[], int maxd, int *adj_list) {
     int *colors = (int *) calloc(n, sizeof(int));
     int num_conflicts = n;
-    int *conflicts = (int *) malloc(num_conflicts * sizeof(int));
+    int *conflicts = (int *) malloc((num_conflicts+1) * sizeof(int));
     for (int i = 0; i < n; ++i) {
         conflicts[i] = i;
     }
     int temp_num_conflicts = 0;
-    int *temp_conflicts = (int *) malloc(num_conflicts * sizeof(int));
+    int *temp_conflicts = (int *) malloc((num_conflicts+1) * sizeof(int));
 
     while (num_conflicts) {
         assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
