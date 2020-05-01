@@ -47,7 +47,6 @@ int main(int argc, char *argv[]) {
     new_filename += "_graph";
     ofstream fout(new_filename.c_str());
 
-    cout << "Hi" << __LINE__ << endl;
     fflush(stdin);
     fflush(stdout);
     fout << max_degree << "\n";
