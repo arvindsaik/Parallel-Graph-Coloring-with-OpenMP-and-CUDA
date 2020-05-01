@@ -3,6 +3,7 @@
 
 
 using namespace std;
+#define NUM_THREADS 10
 
 void printGraph(int n, int m[], int **adj_list) {
 	for (int i = 0; i < n; ++i) {
@@ -47,7 +48,7 @@ void setGraph(int n, int m[], int **adj_list) {
 
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
 #if OMP
-	#pragma omp parallel num_threads(10)
+	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
 	for (int i = 0; i < num_conflicts; ++i) {
@@ -74,7 +75,7 @@ void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **ad
 void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list, int *colors,
                       int *temp_num_conflicts, int *temp_conflicts) {
 	#if OMP
-		#pragma omp parallel num_threads(4)
+		#pragma omp parallel num_threads(NUM_THREADS)
 		#pragma omp for
 	#endif
 	for (int i = 0; i < num_conflicts; ++i) {
@@ -158,25 +159,20 @@ int main(int argc, char *argv[]) {
 	adjacency_list = (int **) malloc(nvertices * sizeof(int *));
 	num_edges = (int *) malloc(nvertices * sizeof(int ));
 	for (int i = 0; i < nvertices; ++i) {
-		cout << i << "-----";
 		fin >> num_edges[i];
-		cout << num_edges[i] << " : ";
 		fflush(stdin);
 		fflush(stdout);
 		adjacency_list[i] = (int *) malloc(num_edges[i] * sizeof(int));
 		for (int j = 0; j < num_edges[i]; ++j) {
 			fin >> adjacency_list[i][j];
-			cout << adjacency_list[i][j] << " ";
 			fflush(stdin);
 			fflush(stdout);
 		}
-		cout << endl;
 		fflush(stdin);
 		fflush(stdout);
 	}
 	fin.close();
 
-//	printGraph(nvertices, num_edges, adjacency_list);
 	int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
 	cout << "Coloring done!" << endl;
 	if (checker(nvertices, num_edges, colors, adjacency_list)) {
