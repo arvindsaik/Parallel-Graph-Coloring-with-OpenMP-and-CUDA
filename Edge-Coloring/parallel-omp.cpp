@@ -5,7 +5,7 @@
 
 
 using namespace std;
-#define NUM_THREADS 10
+#define NUM_THREADS 12
 
 void assign_colors(long n, long maxd, long *colors, bool **vforbidden) {
 #if OMP

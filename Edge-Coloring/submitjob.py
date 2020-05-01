@@ -40,7 +40,7 @@ def generateScript(scriptName = "latedays.sh", argString = "", outputName = "ben
     except Exception as e:
         print "Couldn't open file '%s' (%s)" % (scriptName, str(e))
         return False
-    argString += " -f " + outputName
+    argString += " > " + outputName
     
         
     scriptFile.write("#!/bin/bash\n")    
@@ -64,7 +64,7 @@ def generateScript(scriptName = "latedays.sh", argString = "", outputName = "ben
     scriptFile.write("cd $PBS_O_WORKDIR\n")    
     scriptFile.write("\n")
     scriptFile.write("# Execute the performance evaluation program and store summary in %s\n" % outputName)
-    scriptFile.write("g++ parallel-omp.cpp cycletimer.cpp -fopenmp -DOMP")
+    scriptFile.write("g++ parallel-omp.cpp cycletimer.cpp -fopenmp -DOMP\n")
     scriptFile.write("./a.out %s\n" % argString)
     scriptFile.close()
     return True
@@ -107,8 +107,6 @@ def run(name, args):
     uniqueId = generateId(digits)
     scriptName = generateFileName(scriptRoot, scriptExtension)
     outputName = generateFileName(outputRoot, outputExtension)
-    if digits > 0:
-        argString += " -i %s" % uniqueId
     if generateScript(scriptName, argString, outputName):
         print "Generated script %s" % scriptName
         if submitJob:
