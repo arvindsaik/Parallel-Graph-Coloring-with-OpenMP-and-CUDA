@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
 	clock_t end = clock();
 	double timeSec = (end - begin) / static_cast<double>( CLOCKS_PER_SEC );
 
-	cout << "Time for coloring : " << timeSec << endl;
+	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
 
 	// Call checker
 	if (checker(num_edges, edges, colors)) {
