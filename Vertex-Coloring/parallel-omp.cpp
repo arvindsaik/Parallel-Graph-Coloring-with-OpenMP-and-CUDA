@@ -47,28 +47,30 @@ void setGraph(int n, int m[], int **adj_list) {
 }
 
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
+	bool **forbidden = (bool **) malloc(num_conflicts * sizeof(bool *));
+	for (int i = 0; i < num_conflicts; ++i) {
+		forbidden[i] = (bool *) malloc(maxd * sizeof(bool));
+	}
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
 	for (int i = 0; i < num_conflicts; ++i) {
-		bool *forbidden = (bool *) malloc(num_conflicts * sizeof(bool));
 		for (int j = 0; j < maxd + 1; ++j) {
-			forbidden[j] = false;
+			forbidden[i][j] = false;
 		}
 		int v = conflicts[i];
 		for (int j = 0; j < m[v]; ++j) {
 			int u = adj_list[v][j];
 			if (colors[u] >= 0)
-				forbidden[colors[u]] = true;
+				forbidden[i][colors[u]] = true;
 		}
 		for (int j = 0; j < maxd + 1; ++j) {
-			if (forbidden[j] == false) {
+			if (forbidden[i][j] == false) {
 				colors[v] = j;
 				break;
 			}
 		}
-		free(forbidden);
 	}
 }
 
@@ -86,9 +88,11 @@ void detect_conflicts(int num_conflicts, int *conflicts, int *m, int **adj_list,
 				#if OMP
 					#pragma omp critical
 				#endif
-				temp_conflicts[*temp_num_conflicts] = u;
-				*temp_num_conflicts = *temp_num_conflicts + 1;
-				colors[u] = -u;
+				{
+					temp_conflicts[*temp_num_conflicts] = u;
+					*temp_num_conflicts = *temp_num_conflicts + 1;
+					colors[u] = -u;
+				}
 			}
 		}
 	}
@@ -126,13 +130,18 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 	return colors;
 }
 
-bool checker(int nvertices, int *num_edges, int *colors, int **adjacency_list) {
+bool checker(int nvertices, int maxd, int *num_edges, int *colors, int **adjacency_list) {
 	bool passed = true;
 	for (int i = 0; i < nvertices; ++i) {
+		if (colors[i] < 0 || colors[i] > maxd) {
+			passed = false;
+			cout << "Wrong coloring of vertex : " << i << endl;
+			break;
+		}
 		for (int j = 0; j < num_edges[i]; ++j) {
 			if (colors[i] == colors[adjacency_list[i][j]]) {
 				passed = false;
-				cout << "Failed coloring between nodes : " << i << " -- " << adjacency_list[i][j];
+				cout << "Failed coloring between nodes : " << i << " -- " << adjacency_list[i][j] << endl;
 				fflush(stdin);
 				fflush(stdout);
 				break;
@@ -175,9 +184,16 @@ int main(int argc, char *argv[]) {
 
 	int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
 	cout << "Coloring done!" << endl;
-	if (checker(nvertices, num_edges, colors, adjacency_list)) {
+	if (checker(nvertices, max_degree, num_edges, colors, adjacency_list)) {
 		cout << "CORRECT COLORING!!!" << endl;
 	} else {
 		cout << "INCORRECT COLORING!!!" << endl;
 	}
+
+	// Free all arrays
+	free(num_edges);
+	for (int i = 0; i < nvertices; ++i) {
+		free(adjacency_list[i]);
+	}
+	free(adjacency_list);
 }
