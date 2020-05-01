@@ -1,6 +1,7 @@
 #include <bits/stdc++.h>
 #include <omp.h>
-#include <ctime>
+//#include <ctime>
+#include "cycletimer.h"
 
 
 using namespace std;
@@ -97,9 +98,15 @@ long *IPGC(long n, long num_edges, long maxd, long **edges) {
 	return colors;
 }
 
-bool checker(long num_edges, long **edges, long *colors) {
+bool checker(long num_edges, long **edges, long *colors, int maxd) {
 	bool passed = true;
 	for (long i = 0; i < num_edges; ++i) {
+		if (colors[edges[i][0]] < 0 || colors[edges[i][0]] > maxd) {
+			passed = false;
+		}
+		if (colors[edges[i][1]] < 0 || colors[edges[i][1]] > maxd) {
+			passed = false;
+		}
 		if (colors[edges[i][0]] == colors[edges[i][1]]) {
 			passed = false;
 		}
@@ -135,16 +142,16 @@ int main(int argc, char *argv[]) {
 	}
 	fin.close();
 
-	clock_t begin = clock();
+	double begin = currentSeconds();
 	// Perform coloring
 	long *colors = IPGC(nvertices, num_edges, max_degree, edges);
-	clock_t end = clock();
-	double timeSec = (end - begin) / static_cast<double>( CLOCKS_PER_SEC );
+	double end = currentSeconds();
+	double timeSec = (end - begin);
 
-	cout << "Time for coloring : " << timeSec << " s" << endl;
+	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
 
 	// Call checker
-	if (checker(num_edges, edges, colors)) {
+	if (checker(num_edges, edges, colors, max_degree)) {
 		cout << "CORRECT COLORING!!!" << endl;
 	} else {
 		cout << "INCORRECT COLORING!!!" << endl;

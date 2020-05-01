@@ -136,8 +136,14 @@ int main(int argc, char *argv[]) {
 	}
 	fin.close();
 
+	double begin = currentSeconds();
 	int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
+	double end = currentSeconds();
+	double timeSec = (end - begin);
+
 	cout << "Coloring done!" << endl;
+	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
+	
 	if (checker(nvertices, max_degree, num_edges, colors, adjacency_list)) {
 		cout << "CORRECT COLORING!!!" << endl;
 	} else {
