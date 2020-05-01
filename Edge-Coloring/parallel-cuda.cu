@@ -53,7 +53,8 @@ __global__ void detect_conflicts_kernel(int* edges, int* colors, int* temp_color
     }
     if (colors[smaller_vertex] == colors[bigger_vertex]) {
         temp_colors[smaller_vertex] = -1;
-        *is_conflict = true;
+        if (*is_conflict == false)
+            *is_conflict = true;
     }
     vforbidden[smaller_vertex * (max_degree+1) + colors[bigger_vertex]] = true;
 }
