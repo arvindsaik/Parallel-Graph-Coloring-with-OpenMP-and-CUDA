@@ -168,7 +168,6 @@ int main(int argc, char *argv[]) {
 			fflush(stdin);
 			fflush(stdout);
 		}
-		cout << endl;
 		fflush(stdin);
 		fflush(stdout);
 	}
