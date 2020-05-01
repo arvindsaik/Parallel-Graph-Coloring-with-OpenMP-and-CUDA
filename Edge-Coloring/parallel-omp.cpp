@@ -39,9 +39,11 @@ bool detect_conflicts(long num_edges, long **edges, long *colors, long *temp_col
 		}
 		if (colors[smaller_vertex] == colors[bigger_vertex]) {
 			temp_colors[smaller_vertex] = -1;
-			is_conflict = true;
+			if (!is_conflict)
+				is_conflict = true;
 		}
-		vforbidden[smaller_vertex][colors[bigger_vertex]] = true;
+		if (!vforbidden[smaller_vertex][colors[bigger_vertex]])
+			vforbidden[smaller_vertex][colors[bigger_vertex]] = true;
 	}
 	return is_conflict;
 }
@@ -60,13 +62,10 @@ long *IPGC(long n, long num_edges, long maxd, long **edges) {
 	long iter = 0;
 	long is_conflict = true;
 	while (is_conflict) {
-		iter++;
+		cout << "Iteration #" << iter++ << endl;
 		fflush(stdin);
 		fflush(stdout);
 		assign_colors(n, maxd, colors, vforbidden);
-
-		fflush(stdin);
-		fflush(stdout);
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
@@ -90,9 +89,9 @@ long *IPGC(long n, long num_edges, long maxd, long **edges) {
 		}
 	}
 	cout << "Iterations taken to converge " << iter << endl;
-	for (long i = 0; i < n; ++i) {
-		cout << "Color of node " << i << " : " << colors[i] << endl;
-	}
+//	for (long i = 0; i < n; ++i) {
+//		cout << "Color of node " << i << " : " << colors[i] << endl;
+//	}
 	fflush(stdin);
 	fflush(stdout);
 	return colors;
@@ -142,7 +141,7 @@ int main(int argc, char *argv[]) {
 	clock_t end = clock();
 	double timeSec = (end - begin) / static_cast<double>( CLOCKS_PER_SEC );
 
-	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
+	cout << "Time for coloring : " << timeSec << " s" << endl;
 
 	// Call checker
 	if (checker(num_edges, edges, colors)) {
