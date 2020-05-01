@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Coloring done!" << endl;
 	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
-	
+
 	if (checker(nvertices, max_degree, num_edges, colors, adjacency_list)) {
 		cout << "CORRECT COLORING!!!" << endl;
 	} else {
