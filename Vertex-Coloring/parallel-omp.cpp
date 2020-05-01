@@ -5,47 +5,6 @@
 using namespace std;
 #define NUM_THREADS 10
 
-void printGraph(int n, int m[], int **adj_list) {
-	for (int i = 0; i < n; ++i) {
-		cout << "Node " << i << " || ";
-		cout << m[i] << endl;
-		fflush(stdin);
-		fflush(stdout);
-		for (int j = 0; j < m[i]; ++j) {
-			cout << i << " : " << j << endl;
-			fflush(stdin);
-			fflush(stdout);
-			cout << adj_list[i][j] << "    ";
-			fflush(stdin);
-			fflush(stdout);
-		}
-		cout << endl;
-		fflush(stdin);
-		fflush(stdout);
-	}
-
-}
-
-void setGraph(int n, int m[], int **adj_list) {
-	// Vertex 0
-	adj_list[0][0] = 1;
-	adj_list[0][1] = 3;
-
-	// Vertex 1
-	adj_list[1][0] = 0;
-	adj_list[1][1] = 2;
-	adj_list[1][2] = 3;
-
-	// Vertex 2
-	adj_list[2][0] = 1;
-	adj_list[2][1] = 3;
-
-	// Vertex 3
-	adj_list[3][0] = 0;
-	adj_list[3][1] = 1;
-	adj_list[3][2] = 2;
-}
-
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
 	bool **forbidden = (bool **) malloc(num_conflicts * sizeof(bool *));
 	for (int i = 0; i < num_conflicts; ++i) {
@@ -110,9 +69,7 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 
 	while (num_conflicts) {
 		assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
-		cout << "Assign colors done!\n";
 		detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
-		cout << "Detect conflicts done\n";
 		// Swap
 		num_conflicts = temp_num_conflicts;
 		int *temp;
@@ -122,9 +79,6 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 		temp_num_conflicts = 0;
 	}
 
-	for (int i = 0; i < n; ++i) {
-		cout << "Color of node " << i << " : " << colors[i] << endl;
-	}
 	fflush(stdin);
 	fflush(stdout);
 	return colors;
