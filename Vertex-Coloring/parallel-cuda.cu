@@ -35,14 +35,16 @@ void printGraph(int n, int m[], int *adj_list) {
     }
 }
 
-__global__ void assign_init_values(int* conflicts) {
+__global__ void assign_init_values(int* conflicts, int num_vertices) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_vertices) return;
     conflicts[i] = i;
 }
 
 __global__ void assign_colors_kernel(int num_conflicts, int *conflicts, int maxd, int *m, int *adj_list, int *colors,
                                      int* new_colors, bool* forbidden) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_conflicts) return;
 
     for (int j = 0; j < maxd + 1; ++j) {
         forbidden[i*(maxd+1) + j] = false;
@@ -77,16 +79,19 @@ __global__ void downsweep(int *data, int twod, int twod1) {
     data[i + twod1 - 1] += t;
 }
 
-__global__ void findConflicts(int* conflicts, int* temp_conflicts) {
+__global__ void findConflicts(int* conflicts, int* temp_conflicts, int num_vertices) {
     int i = (blockIdx.x * blockDim.x + threadIdx.x);
+    if (i >= num_vertices) return;
     if (temp_conflicts[i] < temp_conflicts[i+1]) {
         conflicts[temp_conflicts[i]] = i;
     }
 }
 
 __global__ void detectConflictsKernel(int* conflicts, int* adj_list, int* temp_conflicts, int* colors, int* m, int
-max_degree) {
+max_degree, int num_vertices) {
     int i = (blockIdx.x * blockDim.x + threadIdx.x);
+    if (i >= num_vertices) return;
+
     int v = conflicts[i];
     for (int j = 0; j < m[v]; ++j) {
         int u = adj_list[v * max_degree + j];
@@ -141,7 +146,8 @@ void exclusive_scan(int *device_data, int length) {
 
 void assign_colors(int num_conflicts) {
     cudaMemcpy(device_colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToDevice);
-    assign_colors_kernel <<<1, num_conflicts>>> (num_conflicts, device_conflicts, max_degree, device_m, device_adj_list,
+    assign_colors_kernel <<<(num_conflicts+1023)/1024, 1024>>> (num_conflicts, device_conflicts, max_degree, device_m,
+            device_adj_list,
             device_colors, device_new_colors, device_forbidden);
     cudaDeviceSynchronize();
 }
@@ -149,8 +155,8 @@ void assign_colors(int num_conflicts) {
 void detect_conflicts(int num_conflicts, int *temp_num_conflicts) {
     cudaMemset((void*) device_temp_conflicts, 0, (num_vertices+1) * sizeof(int));
 
-    detectConflictsKernel<<<1, num_conflicts>>> (device_conflicts, device_adj_list, device_temp_conflicts,
-            device_new_colors, device_m, max_degree);
+    detectConflictsKernel<<<(num_conflicts+1023)/1024, 1024>>> (device_conflicts, device_adj_list, device_temp_conflicts,
+            device_new_colors, device_m, max_degree, num_conflicts);
     cudaDeviceSynchronize();
 
     exclusive_scan(device_temp_conflicts, num_vertices + 1);
@@ -158,7 +164,7 @@ void detect_conflicts(int num_conflicts, int *temp_num_conflicts) {
     cudaMemcpy(temp_num_conflicts, device_temp_conflicts + num_vertices, sizeof(int),
                cudaMemcpyDeviceToHost);
 
-    findConflicts<<<1, num_vertices>>> (device_conflicts, device_temp_conflicts);
+    findConflicts<<<(num_vertices+1023)/1024, 1024>>> (device_conflicts, device_temp_conflicts, num_vertices);
     cudaDeviceSynchronize();
 }
 
@@ -166,7 +172,7 @@ int* IPGC() {
     int *colors = (int *) calloc(num_vertices, sizeof(int));
     int num_conflicts = num_vertices;
 
-    assign_init_values<<<1, num_vertices>>>(device_conflicts);
+    assign_init_values<<<(num_vertices+1023)/1024, 1024>>>(device_conflicts, num_vertices);
 
     int temp_num_conflicts = 0;
 
@@ -191,7 +197,7 @@ bool checker(int nvertices, int *num_edges, int *colors, int *adjacency_list) {
     for (int i = 0; i < nvertices; ++i) {
         for (int j = 0; j < num_edges[i]; ++j) {
             if (colors[i] == colors[adjacency_list[i * max_degree + j]] || colors[i] < 0 || colors[i] > max_degree +
-            1) {
+                                                                                                        1) {
                 passed = false;
                 cout << "Failed coloring between nodes : " << i << " -- " << adjacency_list[i * max_degree + j];
                 fflush(stdin);
