@@ -57,7 +57,6 @@ long *IPGC(long n, long num_edges, long maxd, long **edges) {
 	for (long i = 0; i < n; ++i) {
 		vforbidden[i] = (bool *) calloc(maxd + 1, sizeof(bool));
 	}
-	bool *conflicts = (bool *) malloc(n * sizeof(bool));
 	long iter = 0;
 	long is_conflict = true;
 	while (is_conflict) {
