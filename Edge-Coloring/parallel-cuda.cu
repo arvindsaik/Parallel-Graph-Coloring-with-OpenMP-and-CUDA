@@ -22,6 +22,15 @@ int* device_edges;
 int* device_temp_colors;
 bool* device_is_conflict;
 
+#define BILLION  1000000000.0
+
+double assign_colors_time = 0;
+double detect_conflicts_time = 0;
+double total_time = 0;
+double memory_ops_time = 0;
+int iterations = 0;
+struct timespec m_start, m_end;
+
 __global__ void assign_colors_kernel(int *colors, bool* vforbidden, int max_degree, int num_vertices) {
     int i = (blockIdx.x * blockDim.x + threadIdx.x);
 
@@ -67,14 +76,24 @@ void assign_colors() {
 
 bool detect_conflicts() {
     bool is_conflict = false;
+    clock_gettime(CLOCK_REALTIME, &m_start);
     cudaMemset(device_is_conflict, false, sizeof(bool));
+    clock_gettime(CLOCK_REALTIME, &m_end);
+
+    memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                       (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
 
     detect_conflicts_kernel<<<(num_edges + 1023)/1024, 1024>>>(device_edges, device_colors, device_temp_colors,
             device_vforbidden,
             device_is_conflict, max_degree, num_edges);
     cudaDeviceSynchronize();
 
+    clock_gettime(CLOCK_REALTIME, &m_start);
     cudaMemcpy(&is_conflict, device_is_conflict, sizeof(bool), cudaMemcpyDeviceToHost);
+    clock_gettime(CLOCK_REALTIME, &m_end);
+    memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                       (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
+
     return is_conflict;
 }
 
@@ -82,30 +101,53 @@ int *IPGC() {
     int *colors = (int *) malloc(num_vertices * sizeof(int));
     cudaMemset(device_colors, -1, num_vertices * sizeof(int));
 
-    long iter = 0;
     int is_conflict = true;
 
-    while (is_conflict) {
-        cout << __LINE__ << endl;
-        fflush(stdin);
-        fflush(stdout);
+    struct timespec start, end, start1, end1;
 
-        iter++;
+    clock_gettime(CLOCK_REALTIME, &start);
+    while (is_conflict) {
+        iterations++;
+
+        clock_gettime(CLOCK_REALTIME, &start1);
         assign_colors();
 
+        clock_gettime(CLOCK_REALTIME, &m_start);
         cudaMemset(device_vforbidden, 0, num_vertices * (max_degree + 1) * sizeof(bool));
         cudaMemcpy(device_temp_colors, device_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToDevice);
+        clock_gettime(CLOCK_REALTIME, &m_end);
 
+        memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                           (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
+
+        clock_gettime(CLOCK_REALTIME, &end1);
+        assign_colors_time += (end1.tv_sec - start1.tv_sec) +
+                              (end1.tv_nsec - start1.tv_nsec) / BILLION;
+
+        clock_gettime(CLOCK_REALTIME, &start1);
         is_conflict = detect_conflicts();
 
+        clock_gettime(CLOCK_REALTIME, &m_start);
         cudaMemcpy(device_colors, device_temp_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToDevice);
+        clock_gettime(CLOCK_REALTIME, &m_end);
+
+        memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                           (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
+
+        clock_gettime(CLOCK_REALTIME, &end1);
+        detect_conflicts_time += (end1.tv_sec - start1.tv_sec) +
+                                 (end1.tv_nsec - start1.tv_nsec) / BILLION;
     }
 
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time += (end.tv_sec - start.tv_sec) +
+                  (end.tv_nsec - start.tv_nsec) / BILLION;
+
     cudaMemcpy(colors, device_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
-    cout << "Iteration " << iter << endl;
-    for (int i = 0; i < num_vertices; ++i) {
-        cout << "Color of node " << i << " : " << colors[i] << endl;
-    }
+//    cout << "Iteration " << iter << endl;
+//    for (int i = 0; i < num_vertices; ++i) {
+//        cout << "Color of node " << i << " : " << colors[i] << endl;
+//    }
     fflush(stdin);
     fflush(stdout);
     return colors;
@@ -144,6 +186,9 @@ int main(int argc, char *argv[]) {
     }
     fin.close();
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_REALTIME, &start);
+
     cudaMalloc((void**) &device_colors, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_vforbidden, num_vertices * (max_degree + 1) * sizeof(bool));
     cudaMalloc((void**) &device_edges, 2 * num_edges * sizeof(int));
@@ -151,10 +196,24 @@ int main(int argc, char *argv[]) {
     cudaMalloc((void**) &device_is_conflict, sizeof(bool));
 
     cudaMemcpy(device_edges, edges, 2 * num_edges * sizeof(int), cudaMemcpyHostToDevice);
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time += (end.tv_sec - start.tv_sec) +
+                  (end.tv_nsec - start.tv_nsec) / BILLION;
+    memory_ops_time += (end.tv_sec - start.tv_sec) +
+                       (end.tv_nsec - start.tv_nsec) / BILLION;
 
     int *colors = IPGC();
+    cout << "Total time for coloring : " << total_time * 1000 << " ms" << endl;
+    cout << "Time taken for Assign Colors : " << assign_colors_time * 1000 << " ms" << endl;
+    cout << "Time taken for Detect Conflicts : " << detect_conflicts_time * 1000 << " ms" << endl;
+    cout << "Time taken for Memory operations: " << memory_ops_time * 1000 << " ms" << endl;
+    cout << "Iterations taken to converge : " << iterations << endl;
+    int max_color = -1;
+    for (int i = 0; i < num_vertices; ++i) {
+        max_color = max(max_color, colors[i]);
+    }
+    cout << "Colors used in the coloring : " << max_color + 1 << endl;
 
-    cout << "Coloring done!" << endl;
     if (checker(colors)) {
         cout << "CORRECT COLORING!!!" << endl;
     } else {
