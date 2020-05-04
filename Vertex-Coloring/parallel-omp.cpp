@@ -1,9 +1,15 @@
 #include <bits/stdc++.h>
 #include <omp.h>
+#include "cycletimer.h"
 
 
 using namespace std;
-#define NUM_THREADS 10
+#define NUM_THREADS 1
+
+double assign_colors_time = 0;
+double detect_conflicts_time = 0;
+double total_time = 0;
+int iterations = 0;
 
 void assign_colors(int num_conflicts, int *conflicts, int maxd, int *m, int **adj_list, int *colors) {
 	bool **forbidden = (bool **) malloc(num_conflicts * sizeof(bool *));
@@ -66,10 +72,20 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 	}
 	int temp_num_conflicts = 0;
 	int *temp_conflicts = (int *) malloc(num_conflicts * sizeof(int));
-
+	double unknown = 0;
+	double begin = currentSeconds();
 	while (num_conflicts) {
+		iterations++;
+		double begin1 = currentSeconds();
 		assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
+		double end1 = currentSeconds();
+		assign_colors_time += (end1 - begin1);
+
+		begin1 = currentSeconds();
 		detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
+		end1 = currentSeconds();
+		detect_conflicts_time += (end1 - begin1);
+
 		// Swap
 		num_conflicts = temp_num_conflicts;
 		int *temp;
@@ -78,6 +94,8 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 		conflicts = temp;
 		temp_num_conflicts = 0;
 	}
+	double end = currentSeconds();
+	total_time += (end - begin);
 
 	fflush(stdin);
 	fflush(stdout);
@@ -111,12 +129,9 @@ int main(int argc, char *argv[]) {
 	int **adjacency_list;
 	char *filename = argv[1];
 
-	cout << filename << endl;
-
 	ifstream fin(filename);
 	fin >> (max_degree);
 	fin >> (nvertices);
-	cout << nvertices << " : " << max_degree << endl;
 	fflush(stdin);
 	fflush(stdout);
 	adjacency_list = (int **) malloc(nvertices * sizeof(int *));
@@ -136,13 +151,17 @@ int main(int argc, char *argv[]) {
 	}
 	fin.close();
 
-	double begin = currentSeconds();
 	int *colors = IPGC(nvertices, num_edges, max_degree, adjacency_list);
-	double end = currentSeconds();
-	double timeSec = (end - begin);
 
-	cout << "Coloring done!" << endl;
-	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
+	cout << "Total time for coloring : " << total_time * 1000 << " ms" << endl;
+	cout << "Time taken for Assign Colors : " << assign_colors_time * 1000 << " ms" << endl;
+	cout << "Time taken for Detect Conflicts : " << detect_conflicts_time * 1000 << " ms" << endl;
+	cout << "Iterations taken to converge : " << iterations << endl;
+	int max_color = -1;
+	for (int i = 0; i < nvertices; ++i) {
+		max_color = max(max_color, colors[i]);
+	}
+	cout << "Colors used in the coloring : " << max_color + 1 << endl;
 
 	if (checker(nvertices, max_degree, num_edges, colors, adjacency_list)) {
 		cout << "CORRECT COLORING!!!" << endl;
