@@ -6,15 +6,21 @@
 
 using namespace std;
 #define NUM_THREADS 12
+#define BILLION  1000000000.0
 
-void assign_colors(long n, long maxd, long *colors, bool **vforbidden) {
+double assign_colors_time = 0;
+double detect_conflicts_time = 0;
+double total_time = 0;
+int iterations = 0;
+
+void assign_colors(int n, int maxd, int *colors, bool **vforbidden) {
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
-	for (long i = 0; i < n; ++i) {
+	for (int i = 0; i < n; ++i) {
 		if (colors[i] != -1) continue;
-		for (long j = 0; j < maxd + 1; ++j) {
+		for (int j = 0; j < maxd + 1; ++j) {
 			if (vforbidden[i][j] == false) {
 				colors[i] = j;
 				break;
@@ -23,14 +29,14 @@ void assign_colors(long n, long maxd, long *colors, bool **vforbidden) {
 	}
 }
 
-bool detect_conflicts(long num_edges, long **edges, long *colors, long *temp_colors, bool **vforbidden) {
+bool detect_conflicts(int num_edges, int **edges, int *colors, int *temp_colors, bool **vforbidden) {
 	bool is_conflict = false;
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
-	for (long  i = 0; i < num_edges; ++i) {
-		long smaller_vertex, bigger_vertex;
+	for (int  i = 0; i < num_edges; ++i) {
+		int smaller_vertex, bigger_vertex;
 		if (edges[i][0] > edges[i][1]) {
 			bigger_vertex = edges[i][0];
 			smaller_vertex = edges[i][1];
@@ -49,58 +55,67 @@ bool detect_conflicts(long num_edges, long **edges, long *colors, long *temp_col
 	return is_conflict;
 }
 
-long *IPGC(long n, long num_edges, long maxd, long **edges) {
-	long *colors = (long *) malloc(n * sizeof(long));
-	long *temp_colors = (long *) malloc(n * sizeof(long));
-	for (long i = 0; i < n; ++i) {
+int *IPGC(int n, int num_edges, int maxd, int **edges) {
+	int *colors = (int *) malloc(n * sizeof(int));
+	int *temp_colors = (int *) malloc(n * sizeof(int));
+	for (int i = 0; i < n; ++i) {
 		colors[i] = -1;
 		temp_colors[i] = -1;
 	}
 	bool **vforbidden = (bool **) malloc(n * sizeof(bool *));
-	for (long i = 0; i < n; ++i) {
+	for (int i = 0; i < n; ++i) {
 		vforbidden[i] = (bool *) calloc(maxd + 1, sizeof(bool));
 	}
-	long iter = 0;
-	long is_conflict = true;
+	int iter = 0;
+	int is_conflict = true;
+
+    struct timespec start, end, start1, end1;
+
+    clock_gettime(CLOCK_REALTIME, &start);
+
 	while (is_conflict) {
-		cout << "Iteration #" << iter++ << endl;
-		fflush(stdin);
-		fflush(stdout);
+        iterations++;
+        clock_gettime(CLOCK_REALTIME, &start1);
 		assign_colors(n, maxd, colors, vforbidden);
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
-		for (long i = 0; i < n; ++i) {
+		for (int i = 0; i < n; ++i) {
 			memset(vforbidden[i], 0, sizeof(vforbidden[i]));
 			temp_colors[i] = colors[i];
 		}
+        clock_gettime(CLOCK_REALTIME, &end1);
+        assign_colors_time += (end1.tv_sec - start1.tv_sec) +
+                              (end1.tv_nsec - start1.tv_nsec) / BILLION;
 
+        clock_gettime(CLOCK_REALTIME, &start1);
+        is_conflict = detect_conflicts(num_edges, edges, colors, temp_colors, vforbidden);
 
-		is_conflict = detect_conflicts(num_edges, edges, colors, temp_colors, vforbidden);
-
-		fflush(stdin);
-		fflush(stdout);
 #if OMP
 	#pragma omp parallel num_threads(NUM_THREADS)
 	#pragma omp for
 #endif
-		for (long i = 0; i < n; ++i) {
+		for (int i = 0; i < n; ++i) {
 			colors[i] = temp_colors[i];
 		}
+        clock_gettime(CLOCK_REALTIME, &end1);
+        detect_conflicts_time += (end1.tv_sec - start1.tv_sec) +
+                                 (end1.tv_nsec - start1.tv_nsec) / BILLION;
 	}
-	cout << "Iterations taken to converge " << iter << endl;
-//	for (long i = 0; i < n; ++i) {
+//	for (int i = 0; i < n; ++i) {
 //		cout << "Color of node " << i << " : " << colors[i] << endl;
 //	}
-	fflush(stdin);
-	fflush(stdout);
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time = (end.tv_sec - start.tv_sec) +
+                 (end.tv_nsec - start.tv_nsec) / BILLION;
+
 	return colors;
 }
 
-bool checker(long num_edges, long **edges, long *colors, int maxd) {
+bool checker(int num_edges, int **edges, int *colors, int maxd) {
 	bool passed = true;
-	for (long i = 0; i < num_edges; ++i) {
+	for (int i = 0; i < num_edges; ++i) {
 		if (colors[edges[i][0]] < 0 || colors[edges[i][0]] > maxd) {
 			passed = false;
 		}
@@ -115,9 +130,9 @@ bool checker(long num_edges, long **edges, long *colors, int maxd) {
 }
 
 int main(int argc, char *argv[]) {
-	long nvertices;
-	long num_edges;
-	long max_degree;
+	int nvertices;
+	int num_edges;
+	int max_degree;
 	char *filename = argv[1];
 
 	// Read graph from file
@@ -129,12 +144,12 @@ int main(int argc, char *argv[]) {
 	cout << max_degree << " : " << nvertices << " : " << num_edges << endl;
 	fflush(stdin);
 	fflush(stdout);
-	long **edges = (long **) malloc(num_edges * sizeof(long *));
-	for (long i = 0; i < num_edges; ++i) {
-		edges[i] = (long *) malloc(2 * sizeof(long));
+	int **edges = (int **) malloc(num_edges * sizeof(int *));
+	for (int i = 0; i < num_edges; ++i) {
+		edges[i] = (int *) malloc(2 * sizeof(int));
 	}
 
-	for (long i = 0; i < num_edges; ++i) {
+	for (int i = 0; i < num_edges; ++i) {
 		fin >> edges[i][0];
 		fin >> edges[i][1];
 		fflush(stdin);
@@ -142,13 +157,18 @@ int main(int argc, char *argv[]) {
 	}
 	fin.close();
 
-	double begin = currentSeconds();
 	// Perform coloring
-	long *colors = IPGC(nvertices, num_edges, max_degree, edges);
-	double end = currentSeconds();
-	double timeSec = (end - begin);
+	int *colors = IPGC(nvertices, num_edges, max_degree, edges);
 
-	cout << "Time for coloring : " << timeSec * 1000 << " ms" << endl;
+    cout << "Total time for coloring : " << total_time * 1000 << " ms" << endl;
+    cout << "Time taken for Assign Colors : " << assign_colors_time * 1000 << " ms" << endl;
+    cout << "Time taken for Detect Conflicts : " << detect_conflicts_time * 1000 << " ms" << endl;
+    cout << "Iterations taken to converge : " << iterations << endl;
+    int max_color = -1;
+    for (int i = 0; i < nvertices; ++i) {
+        max_color = max(max_color, colors[i]);
+    }
+    cout << "Colors used in the coloring : " << max_color + 1 << endl;
 
 	// Call checker
 	if (checker(num_edges, edges, colors, max_degree)) {

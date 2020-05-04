@@ -25,6 +25,15 @@ int* device_colors;
 int* device_new_colors;
 bool* device_forbidden;
 
+#define BILLION  1000000000.0
+
+double assign_colors_time = 0;
+double detect_conflicts_time = 0;
+double total_time = 0;
+double memory_ops_time = 0;
+int iterations = 0;
+struct timespec m_start, m_end;
+
 void printGraph(int n, int m[], int *adj_list) {
     for (int i = 0; i < n; ++i) {
         cout << "Node " << i << " || ";
@@ -145,7 +154,13 @@ void exclusive_scan(int *device_data, int length) {
 }
 
 void assign_colors(int num_conflicts) {
+    clock_gettime(CLOCK_REALTIME, &m_start);
     cudaMemcpy(device_colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToDevice);
+    clock_gettime(CLOCK_REALTIME, &m_end);
+
+    memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                       (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
+
     assign_colors_kernel <<<(num_conflicts+1023)/1024, 1024>>> (num_conflicts, device_conflicts, max_degree, device_m,
             device_adj_list,
             device_colors, device_new_colors, device_forbidden);
@@ -153,7 +168,11 @@ void assign_colors(int num_conflicts) {
 }
 
 void detect_conflicts(int num_conflicts, int *temp_num_conflicts) {
+    clock_gettime(CLOCK_REALTIME, &m_start);
     cudaMemset((void*) device_temp_conflicts, 0, (num_vertices+1) * sizeof(int));
+    clock_gettime(CLOCK_REALTIME, &m_end);
+    memory_ops_time += (m_end.tv_sec - m_start.tv_sec) +
+                       (m_end.tv_nsec - m_start.tv_nsec) / BILLION;
 
     detectConflictsKernel<<<(num_conflicts+1023)/1024, 1024>>> (device_conflicts, device_adj_list, device_temp_conflicts,
             device_new_colors, device_m, max_degree, num_conflicts);
@@ -176,17 +195,35 @@ int* IPGC() {
 
     int temp_num_conflicts = 0;
 
+    struct timespec start, end, start1, end1;
+
+    clock_gettime(CLOCK_REALTIME, &start);
     while (num_conflicts) {
+        iterations++;
+
+        clock_gettime(CLOCK_REALTIME, &start1);
         assign_colors(num_conflicts);
+        clock_gettime(CLOCK_REALTIME, &end1);
+        assign_colors_time += (end1.tv_sec - start1.tv_sec) +
+                              (end1.tv_nsec - start1.tv_nsec) / BILLION;
+
+        clock_gettime(CLOCK_REALTIME, &start1);
         detect_conflicts(num_conflicts, &temp_num_conflicts);
+        clock_gettime(CLOCK_REALTIME, &end1);
+        detect_conflicts_time += (end1.tv_sec - start1.tv_sec) +
+                                 (end1.tv_nsec - start1.tv_nsec) / BILLION;
+
         num_conflicts = temp_num_conflicts;
         temp_num_conflicts = 0;
     }
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time += (end.tv_sec - start.tv_sec) +
+                 (end.tv_nsec - start.tv_nsec) / BILLION;
 
     cudaMemcpy(colors, device_new_colors, num_vertices * sizeof(int), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < num_vertices; ++i) {
-        cout << "Color of node " << i << " : " << colors[i] << endl;
-    }
+//    for (int i = 0; i < num_vertices; ++i) {
+//        cout << "Color of node " << i << " : " << colors[i] << endl;
+//    }
     fflush(stdin);
     fflush(stdout);
     return colors;
@@ -227,6 +264,9 @@ int main(int argc, char *argv[]) {
     }
     fin.close();
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_REALTIME, &start);
+
     cudaMalloc((void**) &device_m, num_vertices * sizeof(int));
     cudaMalloc((void**) &device_adj_list, max_degree * num_vertices * sizeof(int));
     cudaMalloc((void**) &device_temp_conflicts, nextPow2(num_vertices + 1) * sizeof(int));
@@ -238,9 +278,25 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(device_adj_list, adjacency_list, max_degree * num_vertices * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(device_m, num_edges_per_vertex, num_vertices * sizeof(int), cudaMemcpyHostToDevice);
 
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time += (end.tv_sec - start.tv_sec) +
+                 (end.tv_nsec - start.tv_nsec) / BILLION;
+    memory_ops_time += (end.tv_sec - start.tv_sec) +
+                       (end.tv_nsec - start.tv_nsec) / BILLION;
+
 //	printGraph(nvertices, num_edges, adjacency_list);
     int *colors = IPGC();
-    cout << "Coloring done!" << endl;
+    cout << "Total time for coloring : " << total_time * 1000 << " ms" << endl;
+    cout << "Time taken for Assign Colors : " << assign_colors_time * 1000 << " ms" << endl;
+    cout << "Time taken for Detect Conflicts : " << detect_conflicts_time * 1000 << " ms" << endl;
+    cout << "Time taken for Memory operations: " << memory_ops_time * 1000 << " ms" << endl;
+    cout << "Iterations taken to converge : " << iterations << endl;
+    int max_color = -1;
+    for (int i = 0; i < num_vertices; ++i) {
+        max_color = max(max_color, colors[i]);
+    }
+    cout << "Colors used in the coloring : " << max_color + 1 << endl;
+
     if (checker(num_vertices, num_edges_per_vertex, colors, adjacency_list)) {
         cout << "CORRECT COLORING!!!" << endl;
     } else {

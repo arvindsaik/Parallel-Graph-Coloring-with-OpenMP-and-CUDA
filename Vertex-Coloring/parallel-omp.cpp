@@ -1,10 +1,10 @@
 #include <bits/stdc++.h>
 #include <omp.h>
-#include "cycletimer.h"
 
 
 using namespace std;
 #define NUM_THREADS 1
+#define BILLION  1000000000.0
 
 double assign_colors_time = 0;
 double detect_conflicts_time = 0;
@@ -73,20 +73,24 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 	int temp_num_conflicts = 0;
 	int *temp_conflicts = (int *) malloc(num_conflicts * sizeof(int));
 	double unknown = 0;
-	double begin = currentSeconds();
+	struct timespec start, end, start1, end1;
+
+    clock_gettime(CLOCK_REALTIME, &start);
 	while (num_conflicts) {
 		iterations++;
-		double begin1 = currentSeconds();
+        clock_gettime(CLOCK_REALTIME, &start1);
 		assign_colors(num_conflicts, conflicts, maxd, m, adj_list, colors);
-		double end1 = currentSeconds();
-		assign_colors_time += (end1 - begin1);
+        clock_gettime(CLOCK_REALTIME, &end1);
+		assign_colors_time += (end1.tv_sec - start1.tv_sec) +
+                              (end1.tv_nsec - start1.tv_nsec) / BILLION;
 
-		begin1 = currentSeconds();
-		detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
-		end1 = currentSeconds();
-		detect_conflicts_time += (end1 - begin1);
+        clock_gettime(CLOCK_REALTIME, &start1);
+        detect_conflicts(num_conflicts, conflicts, m, adj_list, colors, &temp_num_conflicts, temp_conflicts);
+        clock_gettime(CLOCK_REALTIME, &end1);
+		detect_conflicts_time += (end1.tv_sec - start1.tv_sec) +
+                                 (end1.tv_nsec - start1.tv_nsec) / BILLION;
 
-		// Swap
+        // Swap
 		num_conflicts = temp_num_conflicts;
 		int *temp;
 		temp = temp_conflicts;
@@ -94,8 +98,9 @@ int * IPGC(int n, int m[], int maxd, int **adj_list) {
 		conflicts = temp;
 		temp_num_conflicts = 0;
 	}
-	double end = currentSeconds();
-	total_time += (end - begin);
+    clock_gettime(CLOCK_REALTIME, &end);
+    total_time = (end.tv_sec - start.tv_sec) +
+                        (end.tv_nsec - start.tv_nsec) / BILLION;
 
 	fflush(stdin);
 	fflush(stdout);
