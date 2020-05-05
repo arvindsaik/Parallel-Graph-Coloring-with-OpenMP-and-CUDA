@@ -20,12 +20,19 @@ void assign_colors(int n, int maxd, int *colors, bool **vforbidden) {
 #endif
 	for (int i = 0; i < n; ++i) {
 		if (colors[i] != -1) continue;
+		int flag = 0;
 		for (int j = 0; j < maxd + 1; ++j) {
 			if (vforbidden[i][j] == false) {
 				colors[i] = j;
+				flag = 1;
 				break;
 			}
 		}
+		if (!flag) {
+			cout << "Exhausted all colors : " << endl;
+			exit(1);
+		}
+
 	}
 }
 
@@ -82,7 +89,7 @@ int *IPGC(int n, int num_edges, int maxd, int **edges) {
 	#pragma omp for
 #endif
 		for (int i = 0; i < n; ++i) {
-			memset(vforbidden[i], 0, sizeof(vforbidden[i]));
+			memset(vforbidden[i], 0, (maxd + 1) * sizeof(bool));
 			temp_colors[i] = colors[i];
 		}
         clock_gettime(CLOCK_REALTIME, &end1);
@@ -103,9 +110,7 @@ int *IPGC(int n, int num_edges, int maxd, int **edges) {
         detect_conflicts_time += (end1.tv_sec - start1.tv_sec) +
                                  (end1.tv_nsec - start1.tv_nsec) / BILLION;
 	}
-//	for (int i = 0; i < n; ++i) {
-//		cout << "Color of node " << i << " : " << colors[i] << endl;
-//	}
+
     clock_gettime(CLOCK_REALTIME, &end);
     total_time = (end.tv_sec - start.tv_sec) +
                  (end.tv_nsec - start.tv_nsec) / BILLION;
@@ -136,12 +141,10 @@ int main(int argc, char *argv[]) {
 	char *filename = argv[1];
 
 	// Read graph from file
-	cout << filename << endl;
 	ifstream fin(filename);
 	fin >> max_degree;
 	fin >> (nvertices);
 	fin >> (num_edges);
-	cout << max_degree << " : " << nvertices << " : " << num_edges << endl;
 	fflush(stdin);
 	fflush(stdout);
 	int **edges = (int **) malloc(num_edges * sizeof(int *));
